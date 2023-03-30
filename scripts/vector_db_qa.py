@@ -1,9 +1,12 @@
-import pinecone
 import os
+import re
 import time
+import json
+
+import pinecone
 from langchain.chains import RetrievalQA
 from langchain.chat_models import ChatOpenAI
-from langchain.document_loaders import TextLoader
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.prompts.chat import (
     ChatPromptTemplate,
@@ -11,65 +14,78 @@ from langchain.prompts.chat import (
     SystemMessagePromptTemplate,
 )
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import Chroma, Pinecone
+from langchain.vectorstores import Pinecone, Chroma
+from langchain.document_loaders.csv_loader import CSVLoader
 
-loader = TextLoader("busines_tax_split.txt")
+loader = CSVLoader(file_path="./transcript_clean.csv", source_column="id")
+
 documents = loader.load()
+
+with open("episode_to_youtube_id.json", "r") as f:
+    episode_to_youtube_id = json.load(f)
+
+# strip "id", "transcirpt" in page_content
+for doc in documents:
+    doc.page_content = doc.page_content.split("transcript: ", 1)[-1].strip()
+    episode, start_in_sec = doc.metadata['source'].split("_", 1)
+
+    episode = re.findall(r"\d+", episode)[0]
+
+    episode_youtube_id = episode_to_youtube_id[episode]
+
+    doc.metadata = {
+        "episode": episode,
+        "start_in_sec": start_in_sec,
+        "title": f"第 {episode} 集",
+        "link": f"https://www.youtube.com/watch?v={episode_youtube_id}&t={start_in_sec}s",
+    }
 
 text_splitter = CharacterTextSplitter(chunk_size=200, chunk_overlap=0)
 texts = text_splitter.split_documents(documents)
 
-# add meta data
-# metadata: {"source":title + " " +link,"id":episode_id,"link":link,"title":title}
-for i, doc in enumerate(texts):
-    title = doc.page_content.splitlines()[0].strip()
-    flno = title[1:-1].strip()
-    if "章" in title:
-        link = "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0340080"
-    else:
-        link = f"https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=G0340080&flno={flno}",
-    doc.metadata = {
-            "source": "法規資料庫-加值型及非加值型營業稅法",
-            "id": i,
-            "flno": flno,
-            "title": title,
-            "link": link,
-        }
-
 # print how many documents we have
 print(f"Number of documents: {len(texts)}")
 
-embeddings = OpenAIEmbeddings()
-
-# initialize pinecone
-pinecone.init(
-    api_key=os.environ["PINECONE_API_KEY"],  # set in .env
-    environment="us-west4-gcp",  # next to api key in console
-)
-
-index = pinecone.Index("tax-gpt")
-
-index_name = "tax-gpt"
-
-create_new = True
-# Delete vectors if it already exists
-if create_new:
-    try:
-        print("Deleting index")
-        pinecone.delete_index(index_name)
-        print("Deleted index")
-    except pinecone.exceptions.PineconeException as e:
-        print("Index does not exist")
-        print(e)
-        pass
-
-    print("Creating index")
-    docsearch = Pinecone.from_documents(texts, embeddings, index_name=index_name)
-    print("Created index")
+use_openai_embeddings = True
+if use_openai_embeddings:
+    embeddings = embeddings = OpenAIEmbeddings()
 else:
-    docsearch = Pinecone(index, embeddings.embed_query, "text")
+    embeddings = HuggingFaceEmbeddings(model_name="distiluse-base-multilingual-cased-v1")
 
-query = "誰是扣繳義務人？"
+use_pincone = True
+if use_pincone:
+    # initialize pinecone
+    pinecone.init(
+        api_key=os.environ["PINECONE_API_KEY_CSIE"],
+        environment="eu-west1-gcp",  # next to api key in console
+    )
+
+    index_name = "gooaye-gpt"
+
+    index = pinecone.Index(index_name)
+
+
+    create_new = True
+    # Delete vectors if it already exists
+    if create_new:
+        try:
+            print("Deleting index")
+            pinecone.delete_index(index_name)
+            print("Deleted index")
+        except pinecone.exceptions.PineconeException as e:
+            print("Index does not exist")
+            print(e)
+            pass
+
+        print("Creating index")
+        docsearch = Pinecone.from_documents(texts, embeddings, index_name=index_name)
+        print("Created index")
+    else:
+        docsearch = Pinecone(index, embeddings.embed_query, "text")
+else:
+    docsearch = Chroma.from_documents(texts, embeddings)
+
+query = "大盤ETF？"
 # time the query
 start = time.time()
 docs = docsearch.similarity_search(query)
@@ -78,7 +94,7 @@ print(f"Query time: {end - start}")
 
 # print(docs)
 
-system_template = """使用以下法規片段來回答用戶的問題。如果您不知道答案，只需說不知道即可，不要試圖編造答案。將您的答案保持在五句以下。答案要是繁體中文、要準確、有幫助、簡明明確。使用以下段落來回答查詢
+system_template = """使用以下 podcast 片段來回答用戶的問題。如果您不知道答案，只需說不知道即可，不要試圖編造答案。將您的答案保持在五句以下。答案要是繁體中文、要準確、有幫助、簡明明確。使用以下段落來回答查詢
 ----------------
 {context}"""
 messages = [

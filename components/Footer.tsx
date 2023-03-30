@@ -10,28 +10,28 @@ export const Footer: FC = () => {
         Created by
         <a
           className="hover:opacity-50 mx-1"
-          href="https://d8ai.com"
+          href="https://yentingl.com"
           target="_blank"
           rel="noreferrer"
         >
-          D8AI
+          Yen-Ting Lin
         </a>
         based on
         <a
           className="hover:opacity-50 ml-1"
-          href="https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0340080"
+          href="http://linktr.ee/gooaye"
           target="_blank"
           rel="noreferrer"
         >
-          全國法規資料庫
+          股癌's Podcast
         </a>
-        .
+        .  Important: This site is 100% UNAFFILIATED with 股癌.
       </div>
 
       <div className="flex space-x-4">
         <a
           className="flex items-center hover:opacity-50"
-          href="https://d8ai.com"
+          href="https://twitter.com/yentinglin56"
           target="_blank"
           rel="noreferrer"
         >
@@ -40,7 +40,7 @@ export const Footer: FC = () => {
 
         <a
           className="flex items-center hover:opacity-50"
-          href="https://d8ai.com"
+          href="https://github.com/adamlin120/gooaye-gpt"
           target="_blank"
           rel="noreferrer"
         >
