@@ -1,4 +1,4 @@
-# Lex GPT
+# Tax GPT
 
 This app enables AI-powered search for Lex Fridman podcast.
 
